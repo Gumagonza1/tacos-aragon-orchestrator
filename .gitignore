@@ -1,0 +1,20 @@
+node_modules/
+
+# Secretos — nunca al repo
+.env
+host-bridge/.env
+orchestrator/.env
+*.pem
+*.key
+*.p12
+*.cer
+
+# Datos en tiempo de ejecucion
+orchestrator/data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# PM2
+.pm2/

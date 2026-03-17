@@ -1,0 +1,19 @@
+{
+  "name": "tacos-aragon-orchestrator",
+  "version": "1.0.0",
+  "description": "Orquestador central del ecosistema Aragon",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test:unit": "node --test tests/db.test.js tests/recovery.test.js tests/ejecutor.test.js",
+    "test:integracion": "node --test tests/bridge.test.js tests/interno.test.js",
+    "test": "npm run test:unit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2"
+  }
+}

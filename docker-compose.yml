@@ -1,0 +1,38 @@
+version: '3.9'
+
+services:
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: tacos-aragon-orchestrator
+    restart: unless-stopped
+    env_file:
+      - ./orchestrator/.env
+    volumes:
+      - orchestrator_data:/app/data
+    # Acceso al host para alcanzar host-bridge, PM2 API, CFO y Flask
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Puerto del health check — solo accesible desde localhost del host
+    ports:
+      - "127.0.0.1:3050:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e",
+        "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Sin privilegios extra
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+
+volumes:
+  orchestrator_data:
