@@ -1,16 +1,14 @@
 'use strict';
 
-const API_URL = process.env.API_URL;
-const API_TOKEN = process.env.API_TOKEN;
-const ADMIN_NUMERO = process.env.ADMIN_NUMERO;
+const Database = require('better-sqlite3');
+const path     = require('path');
+const crypto   = require('crypto');
 
-if (!API_URL) {
-  console.error('[notifier] API_URL no definida — proceso detenido');
-  process.exit(1);
-}
+const MENSAJES_DB_PATH = process.env.MENSAJES_DB_PATH;
+const ADMIN_NUMERO     = process.env.ADMIN_NUMERO;
 
-if (!API_TOKEN) {
-  console.error('[notifier] API_TOKEN no definida — proceso detenido');
+if (!MENSAJES_DB_PATH) {
+  console.error('[notifier] MENSAJES_DB_PATH no definida — proceso detenido');
   process.exit(1);
 }
 
@@ -19,28 +17,26 @@ if (!ADMIN_NUMERO) {
   process.exit(1);
 }
 
-async function notificarAdmin(mensaje) {
-  const { default: fetch } = await import('node-fetch');
+let _db = null;
 
+function obtenerDb() {
+  if (_db) return _db;
+  _db = new Database(MENSAJES_DB_PATH);
+  _db.pragma('journal_mode = WAL');
+  _db.pragma('busy_timeout = 5000');
+  return _db;
+}
+
+function notificarAdmin(mensaje) {
   try {
-    const res = await fetch(`${API_URL}/interno/mensaje-admin`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-token': API_TOKEN,
-      },
-      body: JSON.stringify({
-        numero: ADMIN_NUMERO,
-        mensaje,
-      }),
-    });
-
-    if (!res.ok) {
-      const texto = await res.text();
-      console.error(`[notifier] Error al enviar mensaje: ${res.status} ${texto}`);
-    }
+    const db = obtenerDb();
+    const id  = `orch-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    db.prepare(`
+      INSERT OR REPLACE INTO mensajes_queue (id, tipo, mensaje, origen, enviado, ts)
+      VALUES (?, 'texto', ?, 'orquestador', 0, ?)
+    `).run(id, mensaje, Date.now());
   } catch (err) {
-    console.error(`[notifier] Fallo de conexion al API: ${err.message}`);
+    console.error(`[notifier] Error escribiendo en mensajes_db: ${err.message}`);
   }
 }
 

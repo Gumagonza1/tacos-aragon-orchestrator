@@ -13,10 +13,13 @@ const { registrarEvento } = require('./db/queries');
 const { iniciarTareas } = require('./scheduler/tareas');
 const { pingBridge } = require('./executor/bridge');
 const { notificarAdmin } = require('./notifier/whatsapp');
+const { procesarPendientesCfo } = require('./queue/cfo');
 
 const HEALTH_PUERTO = parseInt(process.env.HEALTH_PORT, 10) || 3000;
 const estadoAnterior = new Map();
-let sistemaListo = false;
+let sistemaListo  = false;
+let gracePeriod   = true;
+const GRACE_MS    = 60_000; // 60s tras arranque — no recovery hasta que todos los servicios hayan tenido tiempo de subir
 
 // Servidor HTTP minimo solo para health check del contenedor Docker
 const healthServer = http.createServer((req, res) => {
@@ -39,6 +42,10 @@ async function cicloHealth() {
     estadoAnterior.set(nombre, ok);
 
     if (!ok && anterior !== false) {
+      if (gracePeriod) {
+        console.log(`[orquestador] Grace period activo — falla de ${nombre} ignorada hasta que expire`);
+        continue;
+      }
       await manejarFalla(nombre);
     } else if (ok && anterior === false) {
       await manejarRecuperacion(nombre);
@@ -92,7 +99,15 @@ async function arrancar() {
 
   iniciarTareas();
 
+  setTimeout(() => {
+    gracePeriod = false;
+    console.log('[orquestador] Grace period terminado — recovery activo');
+  }, GRACE_MS);
+
   setInterval(cicloHealth, INTERVALO_HEALTH_MS);
+
+  // Procesar solicitudes CFO pendientes cada 10s
+  setInterval(procesarPendientesCfo, 10_000);
 
   await cicloHealth();
 
