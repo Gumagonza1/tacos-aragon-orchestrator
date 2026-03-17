@@ -46,9 +46,18 @@ async function cicloHealth() {
         console.log(`[orquestador] Grace period activo — falla de ${nombre} ignorada hasta que expire`);
         continue;
       }
-      await manejarFalla(nombre);
+      try {
+        await manejarFalla(nombre);
+      } catch (err) {
+        console.error(`[orquestador] Error en recovery de ${nombre}:`, err.message);
+        registrarEvento(nombre, 'recovery_error', err.message, 'error');
+      }
     } else if (ok && anterior === false) {
-      await manejarRecuperacion(nombre);
+      try {
+        await manejarRecuperacion(nombre);
+      } catch (err) {
+        console.error(`[orquestador] Error reportando recuperacion de ${nombre}:`, err.message);
+      }
     }
   }
 }
@@ -128,6 +137,12 @@ process.on('SIGTERM', () => {
 process.on('uncaughtException', (err) => {
   console.error('[orquestador] Error no capturado:', err);
   registrarEvento('orquestador', 'error_critico', err.message, 'critical');
+});
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('[orquestador] Promise rechazada sin capturar:', msg);
+  registrarEvento('orquestador', 'error_critico', msg, 'critical');
 });
 
 arrancar();
