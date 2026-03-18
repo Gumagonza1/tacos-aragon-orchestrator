@@ -49,6 +49,11 @@ function marcarCooldown(servicio, activo) {
   }
 }
 
+function obtenerPropuesta(id) {
+  const db = obtenerDb();
+  return db.prepare('SELECT * FROM propuestas WHERE id = ?').get(id);
+}
+
 function crearPropuesta(tipo, descripcion, detalle) {
   const db = obtenerDb();
   const r = db.prepare(
@@ -126,6 +131,7 @@ module.exports = {
   marcarCooldown,
   crearPropuesta,
   responderPropuesta,
+  obtenerPropuesta,
   obtenerPropuestasPendientes,
   crearSolicitudCfo,
   resolverSolicitudCfo,

@@ -1,7 +1,8 @@
 'use strict';
 
-const { crearPropuesta, responderPropuesta, obtenerPropuestasPendientes } = require('../db/queries');
+const { crearPropuesta, responderPropuesta, obtenerPropuesta, obtenerPropuestasPendientes, registrarAccionAutonoma } = require('../db/queries');
 const { notificarAdmin, leerRespuestasAdmin, marcarRespuestaOrchProcesada } = require('../notifier/whatsapp');
+const { llamarBridge } = require('../executor/bridge');
 
 async function proponerCambio(tipo, descripcion, detalle) {
   const id = crearPropuesta(tipo, descripcion, detalle);
@@ -48,6 +49,20 @@ function listarPendientes() {
   return obtenerPropuestasPendientes();
 }
 
+async function ejecutarPropuestaAprobada(id) {
+  const propuesta = obtenerPropuesta(id);
+  if (!propuesta || propuesta.tipo !== 'git_pull') return;
+
+  try {
+    const resultado = await llamarBridge('git_pull', { ruta: propuesta.detalle });
+    const salida = resultado ? resultado.trim() : 'Sin salida.';
+    await notificarAdmin(`*[ORQUESTADOR]* Propuesta #${id} ejecutada.\n${salida}`);
+    registrarAccionAutonoma('git_pull', propuesta.detalle, salida);
+  } catch (err) {
+    await notificarAdmin(`*[ORQUESTADOR]* Error ejecutando propuesta #${id}: ${err.message}`);
+  }
+}
+
 let _procesandoRespuestas = false;
 
 async function procesarRespuestasAdmin() {
@@ -62,6 +77,8 @@ async function procesarRespuestasAdmin() {
         const resultado = await procesarRespuesta(fila.texto);
         if (!resultado) {
           console.warn(`[cola] Respuesta admin no reconocida: "${fila.texto}"`);
+        } else if (resultado.accion === 'aprobar') {
+          await ejecutarPropuestaAprobada(resultado.id);
         }
       } catch (err) {
         console.error('[cola] Error procesando respuesta admin:', err.message);
@@ -74,4 +91,4 @@ async function procesarRespuestasAdmin() {
   }
 }
 
-module.exports = { proponerCambio, procesarRespuesta, listarPendientes, procesarRespuestasAdmin };
+module.exports = { proponerCambio, procesarRespuesta, listarPendientes, procesarRespuestasAdmin, ejecutarPropuestaAprobada };

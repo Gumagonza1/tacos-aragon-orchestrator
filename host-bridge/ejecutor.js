@@ -12,6 +12,7 @@ const COMANDOS_PERMITIDOS = [
   'taskkill_chrome',
   'sc_query',
   'git_pull',
+  'git_check_updates',
   'disk_status',
   'mem_status',
 ];
@@ -52,6 +53,9 @@ function ejecutar(comando, params = {}) {
     case 'git_pull':
       return _gitPull(params.ruta);
 
+    case 'git_check_updates':
+      return _gitCheckUpdates(params.ruta);
+
     case 'disk_status':
       return _exec('wmic logicaldisk get size,freespace,caption');
 
@@ -73,6 +77,37 @@ function _taskkillChrome() {
   }
 
   return resultados.map(r => `${r.proceso}: ${r.salida.trim()}`).join('\n');
+}
+
+function _gitCheckUpdates(ruta) {
+  if (!ruta || typeof ruta !== 'string') {
+    throw new Error('Ruta requerida para git_check_updates');
+  }
+
+  const rutaResuelta = path.resolve(ruta);
+
+  if (RUTAS_GIT_PERMITIDAS.length === 0) {
+    throw new Error('RUTAS_GIT_PERMITIDAS no configuradas — git_check_updates deshabilitado');
+  }
+
+  const permitida = RUTAS_GIT_PERMITIDAS.some(
+    p => rutaResuelta === p || rutaResuelta.startsWith(p + path.sep)
+  );
+
+  if (!permitida) {
+    throw new Error(`Ruta no permitida para git_check_updates: ${rutaResuelta}`);
+  }
+
+  const fetch = spawnSync('git', ['-C', rutaResuelta, 'fetch', '--quiet'], { encoding: 'utf8', timeout: 30000 });
+  if (fetch.status !== 0) {
+    throw new Error(`git fetch falló: ${(fetch.stderr || '').trim()}`);
+  }
+
+  const log = spawnSync(
+    'git', ['-C', rutaResuelta, 'log', 'HEAD..FETCH_HEAD', '--oneline', '--no-merges'],
+    { encoding: 'utf8', timeout: 10000 }
+  );
+  return (log.stdout || '').trim();
 }
 
 function _gitPull(ruta) {

@@ -3,6 +3,7 @@
 const { llamarBridge } = require('./bridge');
 const { registrarAccionAutonoma, registrarEvento } = require('../db/queries');
 const { notificarAdmin } = require('../notifier/whatsapp');
+const { proponerCambio } = require('../approval/cola');
 
 const DISCO_MINIMO_GB = parseFloat(process.env.DISCO_MINIMO_GB) || 5;
 const MEM_MINIMA_MB = parseFloat(process.env.MEM_MINIMA_MB) || 512;
@@ -73,16 +74,22 @@ async function verificarMemoria() {
 
 async function verificarCommitsNuevos(ruta, nombreRepo) {
   try {
-    const resultado = await llamarBridge('git_pull', { ruta });
-    if (!resultado) return;
+    const resultado = await llamarBridge('git_check_updates', { ruta });
+    if (!resultado || !resultado.trim()) return;
 
-    if (resultado.includes('Already up to date') || resultado.includes('Ya actualizado')) return;
+    const lineas = resultado.trim().split('\n');
+    const resumen = lineas.length > 5
+      ? lineas.slice(0, 5).join('\n') + `\n...(+${lineas.length - 5} más)`
+      : resultado.trim();
 
-    const msg = `*[ORQUESTADOR]* El repo *${nombreRepo}* tiene cambios nuevos que no se han aplicado en produccion.\n\n${resultado.trim()}\n\nResponde *si* para aplicar o *no* para ignorar.`;
-    await notificarAdmin(msg);
-    registrarEvento(nombreRepo, 'git_nuevos_commits', resultado.trim(), 'info');
+    await proponerCambio(
+      'git_pull',
+      `Actualizar ${nombreRepo}\n\nCommits nuevos:\n${resumen}`,
+      ruta
+    );
+    registrarEvento(nombreRepo, 'git_nuevos_commits', `${lineas.length} commit(s) nuevo(s)`, 'info');
   } catch (err) {
-    registrarEvento(nombreRepo, 'git_pull', `Error: ${err.message}`, 'error');
+    registrarEvento(nombreRepo, 'git_check_updates', `Error: ${err.message}`, 'error');
   }
 }
 
