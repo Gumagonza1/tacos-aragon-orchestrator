@@ -34,25 +34,36 @@ function verificarToken(auth) {
   }
 }
 
+// Comandos de escritura — modifican el sistema: requieren límite estricto
+const COMANDOS_ESCRITURA = new Set(['pm2_restart', 'pm2_stop', 'pm2_start', 'taskkill_chrome', 'git_pull']);
+
 const app = express();
 app.use(express.json({ limit: '64kb' }));
 
-// Rate limit global — 120 peticiones por 15 minutos
+// Rate limit global — 600 peticiones por 15 minutos (cubre lectura + escritura holgadamente)
 const limiterGlobal = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 120,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones' },
 });
 
-// Rate limit estricto para /ejecutar — 60 por 15 minutos
-const limiterEjecutar = rateLimit({
+// Rate limit estricto solo para comandos de ESCRITURA — 20 por 15 minutos
+// Previene que un proceso comprometido reinicie/detenga servicios en bucle.
+// Los comandos de lectura (pm2_list, sc_query, disk_status, mem_status, pm2_logs)
+// no están limitados aquí porque el orquestador los usa intensivamente en health checks.
+const limiterEscritura = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Limite de comandos alcanzado' },
+  message: { error: 'Limite de comandos de escritura alcanzado' },
+  skip: (req) => {
+    // Solo aplicar a comandos de escritura; dejar pasar los de lectura
+    const { comando } = req.body || {};
+    return !COMANDOS_ESCRITURA.has(comando);
+  },
 });
 
 app.use(limiterGlobal);
@@ -66,7 +77,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.post('/ejecutar', limiterEjecutar, async (req, res) => {
+app.post('/ejecutar', limiterEscritura, async (req, res) => {
   const { comando, params } = req.body;
 
   if (!comando) {

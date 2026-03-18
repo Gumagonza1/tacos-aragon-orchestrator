@@ -6,7 +6,12 @@ const path     = require('path');
 const MENSAJES_DB_PATH = process.env.MENSAJES_DB_PATH;
 const CFO_URL          = process.env.CFO_URL || 'http://localhost:3002';
 const CFO_TOKEN        = process.env.CFO_TOKEN;
-const TIMEOUT_MS       = 120_000;
+const TIMEOUT_MS       = 30_000;   // 30s por intento (antes 120s total)
+const MAX_REINTENTOS   = 3;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const RUTAS_CFO = {
   impuestos:        '/api/impuestos/analizar',
@@ -45,8 +50,47 @@ function encolarRespuesta(solicitudId, texto) {
   `).run(msgId, texto, Date.now());
 }
 
-async function procesarSolicitudCfo(solicitud) {
+async function llamarCfoConRetry(ruta, payload) {
   const { default: fetch } = await import('node-fetch');
+  let ultimoError;
+
+  for (let intento = 0; intento < MAX_REINTENTOS; intento++) {
+    if (intento > 0) {
+      const espera = (2 ** (intento - 1)) * 1000; // 1s, 2s
+      console.log(`[cfo] Reintento ${intento}/${MAX_REINTENTOS - 1} en ${espera}ms...`);
+      await sleep(espera);
+    }
+
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+
+    try {
+      const res = await fetch(`${CFO_URL}${ruta}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-token': CFO_TOKEN },
+        body:    JSON.stringify(payload),
+        signal:  ctrl.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`CFO respondio ${res.status}: ${err.slice(0, 200)}`);
+      }
+      return await res.json();
+
+    } catch (err) {
+      clearTimeout(timer);
+      ultimoError = err;
+      // No reintentar si fue rechazo HTTP 4xx (error del cliente, no del servidor)
+      if (err.message.includes('CFO respondio 4')) break;
+      console.warn(`[cfo] Intento ${intento + 1} fallido: ${err.message}`);
+    }
+  }
+  throw ultimoError;
+}
+
+async function procesarSolicitudCfo(solicitud) {
   const payload = JSON.parse(solicitud.payload);
   const ruta    = RUTAS_CFO[solicitud.tipo] || RUTAS_CFO.chat;
 
@@ -54,26 +98,8 @@ async function procesarSolicitudCfo(solicitud) {
     payload.pregunta = payload.pregunta || payload.mensaje;
   }
 
-  const ctrl  = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-
   try {
-    const res = await fetch(`${CFO_URL}${ruta}`, {
-      method:  'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-token':  CFO_TOKEN,
-      },
-      body:   JSON.stringify(payload),
-      signal: ctrl.signal,
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`CFO respondio ${res.status}: ${err.slice(0, 200)}`);
-    }
-
-    const data  = await res.json();
+    const data  = await llamarCfoConRetry(ruta, payload);
     const texto = data.analisis_claude || data.analisis || data.respuesta || JSON.stringify(data);
 
     resolverSolicitud(solicitud.id, texto, 'resuelta');
@@ -83,9 +109,7 @@ async function procesarSolicitudCfo(solicitud) {
   } catch (err) {
     resolverSolicitud(solicitud.id, err.message, 'error');
     encolarRespuesta(solicitud.id, `Error CFO [${solicitud.tipo}]: ${err.message}`);
-    console.error(`[cfo] Error procesando ${solicitud.id}:`, err.message);
-  } finally {
-    clearTimeout(timer);
+    console.error(`[cfo] Error procesando ${solicitud.id} tras ${MAX_REINTENTOS} intentos:`, err.message);
   }
 }
 
