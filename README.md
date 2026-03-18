@@ -1,67 +1,81 @@
-# tacos-aragon-orchestrator
+# tacos-aragon-orchestrator — Aragón Ecosystem
 
-Central orchestrator for the Aragón ecosystem. Monitors all services, executes autonomous low-risk actions, and requests admin approval for critical changes via Telegram.
+Central watchdog for all Aragón services. Polls every 30 s, executes low-risk recoveries autonomously, and routes critical decisions to the admin via Telegram for approval.
 
-## Architecture
+## How it works
 
 ```
-[Docker: orchestrator]  <-->  [Windows: host-bridge (PM2)]
-        |
-        |-- health/       Service polling every 30s
-        |-- recovery/     Restart and recovery logic
-        |-- reasoning/    Problem analysis
-        |-- approval/     Pending proposals queue
-        |-- notifier/     Telegram notifications to admin
-        |-- queue/        CFO agent requests
-        |-- scheduler/    Scheduled automatic tasks
-        |-- db/           SQLite (single source of truth)
+All services
+  ├── TacosAragon (NSSM)
+  ├── tacos-aragon-api (PM2)
+  ├── cfo-aragon-agent (PM2)
+  ├── MonitorBot (PM2)
+  └── tacos-aragon-web (NSSM + HTTP)
+          │
+          ▼
+  [Docker: orchestrator]  ◄──►  [Windows: host-bridge (PM2)]
+          │
+          ├── health/      Service polling every 30 s
+          ├── recovery/    Restart + recovery logic
+          ├── reasoning/   Intelligent problem analysis
+          ├── approval/    Pending proposals queue
+          ├── notifier/    Telegram notifications
+          ├── scheduler/   Scheduled automatic tasks
+          └── db/          SQLite (single source of truth)
+          │
+          ▼
+  telegram-dispatcher ──► Telegram (admin)
+          ▲
+          └── ✅ Approve / ❌ Reject
 ```
 
 ## Monitored services
 
 | Service | Type | Port |
-|---|---|---|
-| TacosAragon | PM2 | no HTTP |
-| MonitorBot | PM2 | no HTTP |
+|---------|------|------|
+| TacosAragon | NSSM | — |
+| MonitorBot | PM2 | — |
 | tacos-aragon-api | PM2 + HTTP | 3001 |
 | cfo-aragon-agent | PM2 + HTTP | 3002 |
-| tacos-aragon-web | NSSM + HTTP | 80/443 |
+| tacos-aragon-web | NSSM + HTTP | 80 / 443 |
 
 ## Autonomous actions (no approval required)
 
-- PM2 process restart on failure (up to 2 times)
-- Full WhatsApp recovery (pm2 stop + taskkill chrome + pm2 start + 5 min cooldown) on third failure
+- PM2 process restart on failure (up to 2 attempts)
+- Full WhatsApp recovery: `pm2 stop` → `taskkill chrome` → `pm2 start` → 5 min cooldown (on 3rd failure)
 - Low disk alert (< 5 GB free)
 - Low memory alert (< 512 MB free)
 - Log cleanup at 4 AM
 - Daily summary at 9 AM via Telegram
-- New commit detection in repos every 2 hours
+- New commit detection in all repos every 2 hours
 
 ## Actions requiring approval
 
-- git pull in any repo
+- `git pull` in any repo
 - Configuration changes
-- Any code changes
+- Code modifications
 - Non-urgent restarts
 
 ## Admin response
 
-From Telegram (inline buttons or text commands):
-- Tap ✅ **Approve** / ❌ **Reject** on the proposal message, or
-- `aprobar 3` — approve proposal number 3
-- `rechazar 3` — reject proposal number 3
+From Telegram (inline buttons or text):
 
----
+```
+Tap ✅ Approve / ❌ Reject on the proposal message
+  — or —
+aprobar 3    → approve proposal #3
+rechazar 3   → reject proposal #3
+```
 
-## Installation
+## Setup
 
-### 1. Host-bridge (Windows, run once)
+### 1. Host-bridge (Windows — run once)
 
 ```bash
 cd host-bridge
 npm install
 cp .env.example .env
-# Edit .env with a secure BRIDGE_TOKEN
+# fill in BRIDGE_TOKEN
 pm2 start ecosystem.config.js
 pm2 save
 ```
@@ -71,18 +85,11 @@ pm2 save
 ```bash
 cd orchestrator
 cp .env.example .env
-# Edit .env with all variables
+# fill in all variables
 cd ..
 docker-compose up -d --build
-```
-
-### Verify
-
-```bash
 docker-compose logs -f
 ```
-
----
 
 ## Environment variables
 
@@ -90,41 +97,51 @@ See [orchestrator/.env.example](orchestrator/.env.example) for the full list wit
 
 ---
 
----
+# tacos-aragon-orchestrator — Ecosistema Aragón
 
-# tacos-aragon-orchestrator (ES)
+Vigilante central de todos los servicios Aragón. Hace polling cada 30 s, ejecuta recuperaciones de bajo riesgo de forma autónoma y enruta las decisiones críticas al admin por Telegram para su aprobación.
 
-Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecuta acciones autónomas de bajo riesgo, y solicita aprobación del administrador para cambios críticos vía Telegram.
-
-## Arquitectura
+## Cómo funciona
 
 ```
-[Docker: orchestrator]  <-->  [Windows: host-bridge (PM2)]
-        |
-        |-- health/       Polling de servicios cada 30s
-        |-- recovery/     Lógica de reinicio y recuperación
-        |-- reasoning/    Análisis de problemas
-        |-- approval/     Cola de propuestas pendientes
-        |-- notifier/     Notificaciones Telegram al admin
-        |-- queue/        Solicitudes al agente CFO
-        |-- scheduler/    Tareas automáticas programadas
-        |-- db/           SQLite (única fuente de verdad)
+Todos los servicios
+  ├── TacosAragon (NSSM)
+  ├── tacos-aragon-api (PM2)
+  ├── cfo-aragon-agent (PM2)
+  ├── MonitorBot (PM2)
+  └── tacos-aragon-web (NSSM + HTTP)
+          │
+          ▼
+  [Docker: orchestrator]  ◄──►  [Windows: host-bridge (PM2)]
+          │
+          ├── health/      Polling de servicios cada 30 s
+          ├── recovery/    Lógica de reinicio y recuperación
+          ├── reasoning/   Análisis inteligente de problemas
+          ├── approval/    Cola de propuestas pendientes
+          ├── notifier/    Notificaciones Telegram
+          ├── scheduler/   Tareas automáticas programadas
+          └── db/          SQLite (única fuente de verdad)
+          │
+          ▼
+  telegram-dispatcher ──► Telegram (admin)
+          ▲
+          └── ✅ Aprobar / ❌ Rechazar
 ```
 
 ## Servicios monitoreados
 
 | Servicio | Tipo | Puerto |
-|---|---|---|
-| TacosAragon | PM2 | sin HTTP |
-| MonitorBot | PM2 | sin HTTP |
+|----------|------|--------|
+| TacosAragon | NSSM | — |
+| MonitorBot | PM2 | — |
 | tacos-aragon-api | PM2 + HTTP | 3001 |
 | cfo-aragon-agent | PM2 + HTTP | 3002 |
-| tacos-aragon-web | NSSM + HTTP | 80/443 |
+| tacos-aragon-web | NSSM + HTTP | 80 / 443 |
 
 ## Acciones autónomas (sin pedir permiso)
 
-- Restart de proceso PM2 caído (hasta 2 veces)
-- Recuperación completa de WhatsApp (pm2 stop + taskkill chrome + pm2 start + cooldown 5 min) al tercer fallo
+- Restart de proceso PM2 caído (hasta 2 intentos)
+- Recuperación completa de WhatsApp: `pm2 stop` → `taskkill chrome` → `pm2 start` → cooldown 5 min (al 3er fallo)
 - Alerta de disco bajo (< 5 GB libres)
 - Alerta de memoria baja (< 512 MB libres)
 - Limpieza de logs a las 4 AM
@@ -133,29 +150,31 @@ Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecu
 
 ## Acciones que requieren aprobación
 
-- git pull en cualquier repo
+- `git pull` en cualquier repo
 - Cambios de configuración
-- Cualquier cambio de código
+- Modificaciones de código
 - Reinicios no urgentes
 
 ## Respuesta del administrador
 
 Desde Telegram (botones inline o comandos de texto):
-- Presionar ✅ **Aprobar** / ❌ **Rechazar** en el mensaje de propuesta, o
-- `aprobar 3` — aprueba la propuesta número 3
-- `rechazar 3` — rechaza la propuesta número 3
 
----
+```
+Presionar ✅ Aprobar / ❌ Rechazar en el mensaje de propuesta
+  — o —
+aprobar 3    → aprueba la propuesta #3
+rechazar 3   → rechaza la propuesta #3
+```
 
 ## Instalación
 
-### 1. Host-bridge (Windows, ejecutar una sola vez)
+### 1. Host-bridge (Windows — ejecutar una sola vez)
 
 ```bash
 cd host-bridge
 npm install
 cp .env.example .env
-# Editar .env con BRIDGE_TOKEN seguro
+# completar BRIDGE_TOKEN
 pm2 start ecosystem.config.js
 pm2 save
 ```
@@ -165,19 +184,14 @@ pm2 save
 ```bash
 cd orchestrator
 cp .env.example .env
-# Editar .env con todas las variables
+# completar todas las variables
 cd ..
 docker-compose up -d --build
-```
-
-### Verificar
-
-```bash
 docker-compose logs -f
 ```
-
----
 
 ## Variables de entorno
 
 Ver [orchestrator/.env.example](orchestrator/.env.example) para la lista completa con descripciones.
+
+> **Seguridad:** El archivo `.env` y `ecosystem.config.js` (con rutas locales) nunca se incluyen en el repositorio.
