@@ -12,7 +12,7 @@ const { manejarFallaProceso, reportarRecuperacionProceso } = require('./recovery
 const { registrarEvento } = require('./db/queries');
 const { iniciarTareas } = require('./scheduler/tareas');
 const { pingBridge } = require('./executor/bridge');
-const { notificarAdmin } = require('./notifier/whatsapp');
+const { notificarAdmin } = require('./notifier/notifier');
 const { procesarPendientesCfo } = require('./queue/cfo');
 const { procesarRespuestasAdmin } = require('./approval/cola');
 

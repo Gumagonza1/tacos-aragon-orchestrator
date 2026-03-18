@@ -4,7 +4,7 @@ const cron = require('node-cron');
 const { verificarDisco, verificarMemoria, limpiarLogsViejos, verificarCommitsNuevos } = require('../executor/acciones');
 const { resumenDiario, registrarEvento } = require('../db/queries');
 const { generarResumenDiario } = require('../reasoning/claude');
-const { notificarAdmin } = require('../notifier/whatsapp');
+const { notificarAdmin } = require('../notifier/notifier');
 
 const REPOS = [
   { nombre: 'tacos-aragon-bot', ruta: process.env.RUTA_BOT },

@@ -3,7 +3,7 @@
 const { llamarBridge } = require('../executor/bridge');
 const { incrementarFallas, resetearFallas, marcarCooldown, obtenerFallas, registrarAccionAutonoma } = require('../db/queries');
 const { registrarEvento } = require('../db/queries');
-const { notificarAdmin } = require('../notifier/whatsapp');
+const { notificarAdmin } = require('../notifier/notifier');
 
 const NOMBRE_PROCESO = 'TacosAragon';
 const LIMITE_FALLAS_AUTONOMAS = 2;

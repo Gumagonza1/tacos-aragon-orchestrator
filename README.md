@@ -1,6 +1,6 @@
 # tacos-aragon-orchestrator
 
-Central orchestrator for the Aragón ecosystem. Monitors all services, executes autonomous low-risk actions, and requests admin approval for critical changes via WhatsApp.
+Central orchestrator for the Aragón ecosystem. Monitors all services, executes autonomous low-risk actions, and requests admin approval for critical changes via Telegram.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ Central orchestrator for the Aragón ecosystem. Monitors all services, executes 
         |-- recovery/     Restart and recovery logic
         |-- reasoning/    Problem analysis
         |-- approval/     Pending proposals queue
-        |-- notifier/     WhatsApp messages to admin
+        |-- notifier/     Telegram notifications to admin
         |-- queue/        CFO agent requests
         |-- scheduler/    Scheduled automatic tasks
         |-- db/           SQLite (single source of truth)
@@ -34,7 +34,7 @@ Central orchestrator for the Aragón ecosystem. Monitors all services, executes 
 - Low disk alert (< 5 GB free)
 - Low memory alert (< 512 MB free)
 - Log cleanup at 4 AM
-- Daily summary at 9 AM via WhatsApp
+- Daily summary at 9 AM via Telegram
 - New commit detection in repos every 2 hours
 
 ## Actions requiring approval
@@ -46,7 +46,8 @@ Central orchestrator for the Aragón ecosystem. Monitors all services, executes 
 
 ## Admin response
 
-From WhatsApp:
+From Telegram (inline buttons or text commands):
+- Tap ✅ **Approve** / ❌ **Reject** on the proposal message, or
 - `aprobar 3` — approve proposal number 3
 - `rechazar 3` — reject proposal number 3
 
@@ -93,7 +94,7 @@ See [orchestrator/.env.example](orchestrator/.env.example) for the full list wit
 
 # tacos-aragon-orchestrator (ES)
 
-Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecuta acciones autónomas de bajo riesgo, y solicita aprobación del administrador para cambios críticos vía WhatsApp.
+Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecuta acciones autónomas de bajo riesgo, y solicita aprobación del administrador para cambios críticos vía Telegram.
 
 ## Arquitectura
 
@@ -104,7 +105,7 @@ Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecu
         |-- recovery/     Lógica de reinicio y recuperación
         |-- reasoning/    Análisis de problemas
         |-- approval/     Cola de propuestas pendientes
-        |-- notifier/     Mensajes WhatsApp al admin
+        |-- notifier/     Notificaciones Telegram al admin
         |-- queue/        Solicitudes al agente CFO
         |-- scheduler/    Tareas automáticas programadas
         |-- db/           SQLite (única fuente de verdad)
@@ -127,7 +128,7 @@ Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecu
 - Alerta de disco bajo (< 5 GB libres)
 - Alerta de memoria baja (< 512 MB libres)
 - Limpieza de logs a las 4 AM
-- Resumen diario a las 9 AM por WhatsApp
+- Resumen diario a las 9 AM por Telegram
 - Detección de commits nuevos en repos cada 2 horas
 
 ## Acciones que requieren aprobación
@@ -139,7 +140,8 @@ Orquestador central del ecosistema Aragón. Monitorea todos los servicios, ejecu
 
 ## Respuesta del administrador
 
-Desde WhatsApp responder:
+Desde Telegram (botones inline o comandos de texto):
+- Presionar ✅ **Aprobar** / ❌ **Rechazar** en el mensaje de propuesta, o
 - `aprobar 3` — aprueba la propuesta número 3
 - `rechazar 3` — rechaza la propuesta número 3
 

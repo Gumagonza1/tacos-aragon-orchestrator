@@ -2,7 +2,7 @@
 
 const { llamarBridge } = require('./bridge');
 const { registrarAccionAutonoma, registrarEvento } = require('../db/queries');
-const { notificarAdmin } = require('../notifier/whatsapp');
+const { notificarAdmin } = require('../notifier/notifier');
 const { proponerCambio } = require('../approval/cola');
 
 const DISCO_MINIMO_GB = parseFloat(process.env.DISCO_MINIMO_GB) || 5;

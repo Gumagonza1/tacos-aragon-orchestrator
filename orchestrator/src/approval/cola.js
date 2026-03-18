@@ -1,7 +1,7 @@
 'use strict';
 
 const { crearPropuesta, responderPropuesta, obtenerPropuesta, obtenerPropuestasPendientes, registrarAccionAutonoma } = require('../db/queries');
-const { notificarAdmin, leerRespuestasAdmin, marcarRespuestaOrchProcesada } = require('../notifier/whatsapp');
+const { notificarAdmin, leerRespuestasAdmin, marcarRespuestaOrchProcesada } = require('../notifier/notifier');
 const { llamarBridge } = require('../executor/bridge');
 
 async function proponerCambio(tipo, descripcion, detalle) {

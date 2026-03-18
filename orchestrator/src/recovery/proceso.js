@@ -2,7 +2,7 @@
 
 const { llamarBridge } = require('../executor/bridge');
 const { incrementarFallas, resetearFallas, registrarAccionAutonoma, registrarEvento } = require('../db/queries');
-const { notificarAdmin } = require('../notifier/whatsapp');
+const { notificarAdmin } = require('../notifier/notifier');
 
 const LIMITE_AUTO = 2;
 
