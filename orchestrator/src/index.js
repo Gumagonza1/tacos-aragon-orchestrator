@@ -14,6 +14,7 @@ const { iniciarTareas } = require('./scheduler/tareas');
 const { pingBridge } = require('./executor/bridge');
 const { notificarAdmin } = require('./notifier/whatsapp');
 const { procesarPendientesCfo } = require('./queue/cfo');
+const { procesarRespuestasAdmin } = require('./approval/cola');
 
 const HEALTH_PUERTO = parseInt(process.env.HEALTH_PORT, 10) || 3000;
 const estadoAnterior = new Map();
@@ -117,6 +118,9 @@ async function arrancar() {
 
   // Procesar solicitudes CFO pendientes cada 10s
   setInterval(procesarPendientesCfo, 10_000);
+
+  // Procesar respuestas del admin al orquestador (!o aprobar/rechazar) cada 5s
+  setInterval(procesarRespuestasAdmin, 5_000);
 
   await cicloHealth();
 

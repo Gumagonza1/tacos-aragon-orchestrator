@@ -24,6 +24,18 @@ function obtenerDb() {
   _db = new Database(MENSAJES_DB_PATH);
   _db.pragma('journal_mode = WAL');
   _db.pragma('busy_timeout = 5000');
+
+  // Asegurar que la tabla existe aunque el bot no haya arrancado aún
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS mensajes_responses (
+      id        TEXT NOT NULL,
+      texto     TEXT NOT NULL,
+      ts        INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+      procesado INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_responses_procesado ON mensajes_responses(procesado);
+  `);
+
   return _db;
 }
 
@@ -40,4 +52,27 @@ function notificarAdmin(mensaje) {
   }
 }
 
-module.exports = { notificarAdmin };
+function leerRespuestasAdmin() {
+  try {
+    const db = obtenerDb();
+    return db.prepare(`
+      SELECT rowid, texto FROM mensajes_responses
+      WHERE id = 'orch' AND procesado = 0
+      ORDER BY ts ASC
+    `).all();
+  } catch (err) {
+    console.error('[notifier] Error leyendo respuestas admin:', err.message);
+    return [];
+  }
+}
+
+function marcarRespuestaOrchProcesada(rowid) {
+  try {
+    const db = obtenerDb();
+    db.prepare(`UPDATE mensajes_responses SET procesado = 1 WHERE rowid = ?`).run(rowid);
+  } catch (err) {
+    console.error('[notifier] Error marcando respuesta procesada:', err.message);
+  }
+}
+
+module.exports = { notificarAdmin, leerRespuestasAdmin, marcarRespuestaOrchProcesada };

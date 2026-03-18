@@ -1,7 +1,7 @@
 'use strict';
 
 const { crearPropuesta, responderPropuesta, obtenerPropuestasPendientes } = require('../db/queries');
-const { notificarAdmin } = require('../notifier/whatsapp');
+const { notificarAdmin, leerRespuestasAdmin, marcarRespuestaOrchProcesada } = require('../notifier/whatsapp');
 
 async function proponerCambio(tipo, descripcion, detalle) {
   const id = crearPropuesta(tipo, descripcion, detalle);
@@ -14,7 +14,7 @@ async function proponerCambio(tipo, descripcion, detalle) {
     ``,
     detalle ? `Detalle:\n${detalle}` : '',
     ``,
-    `Responde *aprobar ${id}* o *rechazar ${id}*`,
+    `Responde *!o aprobar ${id}* o *!o rechazar ${id}*`,
   ].filter(l => l !== null).join('\n');
 
   await notificarAdmin(msg);
@@ -48,4 +48,30 @@ function listarPendientes() {
   return obtenerPropuestasPendientes();
 }
 
-module.exports = { proponerCambio, procesarRespuesta, listarPendientes };
+let _procesandoRespuestas = false;
+
+async function procesarRespuestasAdmin() {
+  if (_procesandoRespuestas) return;
+  const filas = leerRespuestasAdmin();
+  if (!filas.length) return;
+
+  _procesandoRespuestas = true;
+  try {
+    for (const fila of filas) {
+      try {
+        const resultado = await procesarRespuesta(fila.texto);
+        if (!resultado) {
+          console.warn(`[cola] Respuesta admin no reconocida: "${fila.texto}"`);
+        }
+      } catch (err) {
+        console.error('[cola] Error procesando respuesta admin:', err.message);
+      } finally {
+        marcarRespuestaOrchProcesada(fila.rowid);
+      }
+    }
+  } finally {
+    _procesandoRespuestas = false;
+  }
+}
+
+module.exports = { proponerCambio, procesarRespuesta, listarPendientes, procesarRespuestasAdmin };
