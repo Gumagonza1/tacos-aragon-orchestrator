@@ -3,7 +3,9 @@
 const SERVICIOS = [
   {
     nombre: 'TacosAragon',
-    tipo: 'pm2',
+    tipo: 'http',
+    url: process.env.WA_URL || 'http://localhost:3003',
+    endpoint: '/health',
     proceso: 'TacosAragon',
     descripcion: 'Bot de WhatsApp',
     critico: true,
@@ -31,6 +33,13 @@ const SERVICIOS = [
     endpoint: '/health',
     proceso: 'cfo-agent',
     descripcion: 'Agente CFO FastAPI',
+    critico: false,
+  },
+  {
+    nombre: 'pmo-agent',
+    tipo: 'pm2',
+    proceso: 'pmo-agent',
+    descripcion: 'Agente PMO — Claude Code para gestión de código',
     critico: false,
   },
   {

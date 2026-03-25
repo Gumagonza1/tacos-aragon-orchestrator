@@ -3,6 +3,7 @@
 const { llamarBridge } = require('../executor/bridge');
 const { incrementarFallas, resetearFallas, registrarAccionAutonoma, registrarEvento } = require('../db/queries');
 const { notificarAdmin } = require('../notifier/notifier');
+const { notificarPmoAutocorrect } = require('../pmo/autocorrect');
 
 const LIMITE_AUTO = 2;
 
@@ -24,6 +25,12 @@ async function manejarFallaProceso(servicio) {
   } else {
     await notificarAdmin(
       `*[ORQUESTADOR]* ${servicio.descripcion} (${servicio.nombre}) ha fallado ${contador} veces. Requiero tu intervencion.`
+    );
+    // Notificar al pmo-agent para diagnóstico y auto-corrección
+    notificarPmoAutocorrect(
+      servicio.nombre,
+      `Proceso ${servicio.nombre} ha fallado ${contador} veces. Los reinicios automáticos no lo resuelven.`,
+      contador
     );
   }
 }

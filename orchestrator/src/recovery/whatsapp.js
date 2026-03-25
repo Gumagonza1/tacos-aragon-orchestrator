@@ -4,6 +4,7 @@ const { llamarBridge } = require('../executor/bridge');
 const { incrementarFallas, resetearFallas, marcarCooldown, obtenerFallas, registrarAccionAutonoma } = require('../db/queries');
 const { registrarEvento } = require('../db/queries');
 const { notificarAdmin } = require('../notifier/notifier');
+const { notificarPmoAutocorrect } = require('../pmo/autocorrect');
 
 const NOMBRE_PROCESO = 'TacosAragon';
 const LIMITE_FALLAS_AUTONOMAS = 2;
@@ -39,6 +40,12 @@ async function manejarFallaWhatsApp() {
       `*[ORQUESTADOR]* El bot de WhatsApp ha fallado ${contador} veces. No realizare mas intentos automaticos. Requiero tu intervencion manual.`
     );
     registrarEvento(NOMBRE_PROCESO, 'recovery', 'Se excedio el limite de recuperacion automatica', 'critical');
+    // Notificar al pmo-agent para diagnóstico y auto-corrección del código
+    notificarPmoAutocorrect(
+      NOMBRE_PROCESO,
+      `Bot WhatsApp ha fallado ${contador} veces. Recuperación completa ejecutada sin éxito. Posible bug en el código.`,
+      contador
+    );
   }
 }
 
@@ -46,13 +53,8 @@ async function reportarRecuperacion() {
   const fallas = obtenerFallas(NOMBRE_PROCESO);
   if (!fallas || fallas.contador === 0) return;
 
-  const ahora = Date.now();
-  const ultimaFalla = (fallas.ultima_falla || 0) * 1000;
-
-  if (ahora - ultimaFalla >= VENTANA_RESET_MS) {
-    resetearFallas(NOMBRE_PROCESO);
-    registrarEvento(NOMBRE_PROCESO, 'recovery', 'Contador de fallas reseteado — 30 min sin problemas', 'info');
-  }
+  resetearFallas(NOMBRE_PROCESO);
+  registrarEvento(NOMBRE_PROCESO, 'recovery', 'Contador de fallas reseteado — servicio recuperado', 'info');
 }
 
 async function _restartSimple(contador) {
@@ -61,7 +63,11 @@ async function _restartSimple(contador) {
   await llamarBridge('pm2_restart', { proceso: NOMBRE_PROCESO });
   registrarAccionAutonoma('pm2_restart', NOMBRE_PROCESO, `Restart automatico falla #${contador}`);
 
-  if (contador === LIMITE_FALLAS_AUTONOMAS) {
+  if (contador === 1) {
+    await notificarAdmin(
+      `*[ORQUESTADOR]* El bot de WhatsApp cayo. Lo reinicie automaticamente (intento 1 de ${LIMITE_FALLAS_AUTONOMAS}).`
+    );
+  } else if (contador === LIMITE_FALLAS_AUTONOMAS) {
     await notificarAdmin(
       `*[ORQUESTADOR]* El bot de WhatsApp cayo por segunda vez. Lo reinicie automaticamente. Si vuelve a caer hare una recuperacion completa.`
     );
