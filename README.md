@@ -1,197 +1,188 @@
-# tacos-aragon-orchestrator — Aragón Ecosystem
-
-Central watchdog for all Aragón services. Polls every 30 s, executes low-risk recoveries autonomously, and routes critical decisions to the admin via Telegram for approval.
-
-## How it works
-
-```
-All services
-  ├── TacosAragon (NSSM)
-  ├── tacos-aragon-api (PM2)
-  ├── cfo-aragon-agent (PM2)
-  ├── MonitorBot (PM2)
-  └── tacos-aragon-web (NSSM + HTTP)
-          │
-          ▼
-  [Docker: orchestrator]  ◄──►  [Windows: host-bridge (PM2)]
-          │
-          ├── health/      Service polling every 30 s
-          ├── recovery/    Restart + recovery logic
-          ├── reasoning/   Intelligent problem analysis
-          ├── approval/    Pending proposals queue
-          ├── notifier/    Telegram notifications
-          ├── scheduler/   Scheduled automatic tasks
-          └── db/          SQLite (single source of truth)
-          │
-          ▼
-  telegram-dispatcher ──► Telegram (admin)
-          ▲
-          └── ✅ Approve / ❌ Reject
-```
-
-## Monitored services
-
-| Service | Type | Port |
-|---------|------|------|
-| TacosAragon | NSSM | — |
-| MonitorBot | PM2 | — |
-| tacos-aragon-api | PM2 + HTTP | 3001 |
-| cfo-aragon-agent | PM2 + HTTP | 3002 |
-| tacos-aragon-web | NSSM + HTTP | 80 / 443 |
-
-## Autonomous actions (no approval required)
-
-- PM2 process restart on failure (up to 2 attempts)
-- Full WhatsApp recovery: `pm2 stop` → `taskkill chrome` → `pm2 start` → 5 min cooldown (on 3rd failure)
-- Low disk alert (< 5 GB free)
-- Low memory alert (< 512 MB free)
-- Log cleanup at 4 AM
-- Daily summary at 9 AM via Telegram
-- New commit detection in all repos every 2 hours
-
-## Actions requiring approval
-
-- `git pull` in any repo
-- Configuration changes
-- Code modifications
-- Non-urgent restarts
-
-## Admin response
-
-From Telegram (inline buttons or text):
-
-```
-Tap ✅ Approve / ❌ Reject on the proposal message
-  — or —
-aprobar 3    → approve proposal #3
-rechazar 3   → reject proposal #3
-```
-
-## Setup
-
-### 1. Host-bridge (Windows — run once)
-
-```bash
-cd host-bridge
-npm install
-cp .env.example .env
-# fill in BRIDGE_TOKEN
-pm2 start ecosystem.config.js
-pm2 save
-```
-
-### 2. Orchestrator (Docker)
-
-```bash
-cd orchestrator
-cp .env.example .env
-# fill in all variables
-cd ..
-docker-compose up -d --build
-docker-compose logs -f
-```
-
-## Environment variables
-
-See [orchestrator/.env.example](orchestrator/.env.example) for the full list with descriptions.
-
----
-
 # tacos-aragon-orchestrator — Ecosistema Aragón
 
-Vigilante central de todos los servicios Aragón. Hace polling cada 30 s, ejecuta recuperaciones de bajo riesgo de forma autónoma y enruta las decisiones críticas al admin por Telegram para su aprobación.
+Vigilante central de todos los servicios Aragón. Monitorea 6 servicios cada 30 segundos via Docker Engine API, ejecuta recuperaciones autónomas, gestiona prioridades de CPU, y enruta decisiones críticas al admin por Telegram.
 
-## Cómo funciona
+## Arquitectura
 
 ```
-Todos los servicios
-  ├── TacosAragon (NSSM)
-  ├── tacos-aragon-api (PM2)
-  ├── cfo-aragon-agent (PM2)
-  ├── MonitorBot (PM2)
-  └── tacos-aragon-web (NSSM + HTTP)
+Servicios Docker
+  ├── bot-tacos           (WhatsApp bot, :3003)
+  ├── tacos-api           (API central, :3001)
+  ├── cfo-agent           (CFO, :3002)
+  ├── bot-tacos-monitor   (Monitor calidad)
+  ├── pmo-agent           (Claude Code agent)
+  └── portfolio-aragon    (Web, :80)
           │
           ▼
-  [Docker: orchestrator]  ◄──►  [Windows: host-bridge (PM2)]
-          │
-          ├── health/      Polling de servicios cada 30 s
-          ├── recovery/    Lógica de reinicio y recuperación
-          ├── reasoning/   Análisis inteligente de problemas
-          ├── approval/    Cola de propuestas pendientes
-          ├── notifier/    Notificaciones Telegram
-          ├── scheduler/   Tareas automáticas programadas
-          └── db/          SQLite (única fuente de verdad)
-          │
-          ▼
+  ┌──────────────────────────────────────┐
+  │    Docker: orchestrator              │
+  │                                      │
+  │  health/      Polling cada 30s       │
+  │  recovery/    Restart + recuperación │
+  │  executor/    Docker Engine API      │
+  │  approval/    Propuestas con botones │
+  │  notifier/    Notificaciones Telegram│
+  │  scheduler/   Cron (disco, RAM, git) │
+  │  pmo/         Auto-corrección código │
+  │  queue/       Cola CFO Agent         │
+  │  db/          SQLite                 │
+  └──────────┬───────────────────────────┘
+             │
+             ▼
   telegram-dispatcher ──► Telegram (admin)
           ▲
           └── ✅ Aprobar / ❌ Rechazar
 ```
 
+**Cambio clave:** El orchestrator ahora usa **Docker Engine API** directamente (via socket Unix `/var/run/docker.sock`), eliminando la dependencia del host-bridge de Windows.
+
 ## Servicios monitoreados
 
-| Servicio | Tipo | Puerto |
-|----------|------|--------|
-| TacosAragon | NSSM | — |
-| MonitorBot | PM2 | — |
-| tacos-aragon-api | PM2 + HTTP | 3001 |
-| cfo-aragon-agent | PM2 + HTTP | 3002 |
-| tacos-aragon-web | NSSM + HTTP | 80 / 443 |
+| Servicio | Container | Puerto | Crítico |
+|----------|-----------|--------|---------|
+| TacosAragon | bot-tacos | 3003 | Si |
+| tacos-api | tacos-api | 3001 | Si |
+| MonitorBot | bot-tacos-monitor | — | Si |
+| cfo-agent | cfo-agent | 3002 | No |
+| pmo-agent | pmo-agent | — | No |
+| telegram-dispatcher | telegram-dispatcher | — | No |
 
 ## Acciones autónomas (sin pedir permiso)
 
-- Restart de proceso PM2 caído (hasta 2 intentos)
-- Recuperación completa de WhatsApp: `pm2 stop` → `taskkill chrome` → `pm2 start` → cooldown 5 min (al 3er fallo)
-- Alerta de disco bajo (< 5 GB libres)
-- Alerta de memoria baja (< 512 MB libres)
-- Limpieza de logs a las 4 AM
-- Resumen diario a las 9 AM por Telegram
-- Detección de commits nuevos en repos cada 2 horas
+| Acción | Detalle |
+|--------|---------|
+| Restart de contenedor | Hasta 2 intentos antes de escalar |
+| Recuperación WhatsApp | stop → kill chromium → start → cooldown 5 min (3er fallo) |
+| Alerta disco bajo | < 5 GB libres |
+| Alerta memoria (2 niveles) | 🟡 < 512 MB: sugerencias + top procesos / 🔴 < 256 MB: propuesta de limpieza auto |
+| Prioridades CPU | Modo trabajo (18:00-23:59 mar-dom) vs modo normal |
+| Limpieza de logs | 4:00 AM diario |
+| Resumen diario | 9:00 AM por Telegram |
+| Detección de commits | Cada 2 horas en todos los repos |
+| Auto-corrección PMO | Notifica al pmo-agent cuando un servicio falla repetidamente |
+
+## Gestión de prioridades CPU
+
+El orchestrator ajusta `CpuShares` de cada contenedor via Docker Engine API:
+
+### Modo trabajo (18:00–23:59, mar-dom)
+
+| Contenedor | CpuShares | Prioridad |
+|------------|-----------|-----------|
+| bot-tacos | 1024 | Máxima |
+| tacos-api | 1024 | Máxima |
+| bot-tacos-monitor | 768 | Media-alta |
+| portfolio-aragon | 768 | Media-alta |
+| pmo-agent | 256 | Baja |
+| cfo-agent | 256 | Baja |
+
+### Modo normal (00:00–17:59)
+
+Todos los contenedores en 1024 (equitativo).
+
+`CpuShares` es relativo — solo aplica cuando hay contención de CPU.
+
+## Alerta de memoria inteligente
+
+| Nivel | Umbral | Acción |
+|-------|--------|--------|
+| 🟡 ALERTA | < 512 MB | Sugerencias + top 5 procesos por RAM |
+| 🔴 CRITICO | < 256 MB | Propuesta con botones para limpieza automática |
+
+La limpieza automática ejecuta:
+1. `docker system prune -f` (contenedores/imágenes no usados)
+2. `journalctl --vacuum-size` (comprimir logs del sistema)
+3. `drop_caches` (liberar caché del kernel)
+
+## Auto-corrección via PMO
+
+Cuando un servicio falla repetidamente (después de agotar reintentos):
+
+1. Orchestrator detecta fallas persistentes
+2. Notifica al **pmo-agent** via cola SQLite compartida (`mensajes.db`)
+3. PMO ejecuta `claude -p` para diagnosticar y corregir el código
+4. Si PMO corrige, el servicio se reinicia automáticamente
 
 ## Acciones que requieren aprobación
 
-- `git pull` en cualquier repo
-- Cambios de configuración
-- Modificaciones de código
-- Reinicios no urgentes
+| Acción | Tipo |
+|--------|------|
+| `git pull` en cualquier repo | Solo repos whitelisted |
+| Limpieza de RAM | docker prune + journal + caches |
+| Cambios de configuración | — |
+| Reinicios no urgentes | — |
 
-## Respuesta del administrador
-
-Desde Telegram (botones inline o comandos de texto):
+Respuesta del admin desde Telegram:
 
 ```
-Presionar ✅ Aprobar / ❌ Rechazar en el mensaje de propuesta
+✅ Aprobar / ❌ Rechazar (botones inline)
   — o —
 aprobar 3    → aprueba la propuesta #3
 rechazar 3   → rechaza la propuesta #3
 ```
 
-## Instalación
+## Estructura del proyecto
 
-### 1. Host-bridge (Windows — ejecutar una sola vez)
-
-```bash
-cd host-bridge
-npm install
-cp .env.example .env
-# completar BRIDGE_TOKEN
-pm2 start ecosystem.config.js
-pm2 save
+```
+tacos-aragon-orchestrator/
+├── docker-compose.yml
+├── orchestrator/
+│   ├── src/
+│   │   ├── index.js           # Entry point, ciclo de polling
+│   │   ├── config.js          # Variables de entorno
+│   │   ├── health/
+│   │   │   ├── monitor.js     # Verificación de todos los servicios
+│   │   │   └── servicios.js   # Definición de servicios y checks
+│   │   ├── recovery/
+│   │   │   ├── whatsapp.js    # Recuperación especial WhatsApp
+│   │   │   └── proceso.js     # Recuperación genérica
+│   │   ├── executor/
+│   │   │   ├── bridge.js      # Docker Engine API (reemplaza host-bridge)
+│   │   │   └── acciones.js    # Acciones autónomas + prioridades CPU
+│   │   ├── approval/
+│   │   │   └── cola.js        # Propuestas pendientes (git_pull, limpiar_ram)
+│   │   ├── notifier/          # Notificaciones Telegram
+│   │   ├── scheduler/
+│   │   │   └── tareas.js      # Cron: disco, RAM, logs, resumen, git, CPU
+│   │   ├── pmo/
+│   │   │   └── autocorrect.js # Integración con pmo-agent
+│   │   ├── queue/
+│   │   │   └── cfo.js         # Cola de solicitudes al CFO Agent
+│   │   └── db/                # SQLite (eventos, fallas, propuestas)
+│   └── Dockerfile
+├── host-bridge/               # Legado Windows (opcional)
+│   ├── bridge.js              # HTTP server para PM2/NSSM
+│   └── ejecutor.js            # Comandos del sistema (Linux)
+└── generar-token.js           # Utilidad para generar tokens
 ```
 
-### 2. Orchestrator (Docker)
+## Instalación (Docker)
 
 ```bash
-cd orchestrator
-cp .env.example .env
-# completar todas las variables
-cd ..
+cd tacos-aragon-orchestrator
 docker-compose up -d --build
 docker-compose logs -f
 ```
 
+**Requisito:** Montar Docker socket al contenedor:
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+```
+
 ## Variables de entorno
 
-Ver [orchestrator/.env.example](orchestrator/.env.example) para la lista completa con descripciones.
+Ver [orchestrator/.env.example](orchestrator/.env.example) para la lista completa.
 
-> **Seguridad:** El archivo `.env` y `ecosystem.config.js` (con rutas locales) nunca se incluyen en el repositorio.
+> **Seguridad:** `.env` y `ecosystem.config.js` nunca se incluyen en el repositorio.
+
+## Ecosistema
+
+| Servicio | Repo | Puerto |
+|----------|------|--------|
+| Bot WhatsApp | [whatsapp-tacos-bot](https://github.com/Gumagonza1/whatsapp-tacos-bot) | 3003 |
+| API central | [tacos-aragon-api](https://github.com/Gumagonza1/tacos-aragon-api) | 3001 |
+| Monitor | [tacos-aragon-monitor](https://github.com/Gumagonza1/tacos-aragon-monitor) | — |
+| Orchestrator | este repo | — |
+| PMO Agent | pmo-agent | — |
+| CFO Agent | cfo_aragon_agent | 3002 |

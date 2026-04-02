@@ -10,14 +10,12 @@ const COMANDOS_PERMITIDOS = [
   'pm2_list',
   'pm2_logs',
   'taskkill_chrome',
-  'sc_query',
   'git_pull',
   'git_check_updates',
   'disk_status',
   'mem_status',
 ];
 
-// Rutas de repos permitidas para git pull — whitelist explicita
 const RUTAS_GIT_PERMITIDAS = (process.env.RUTAS_GIT_PERMITIDAS || '')
   .split(',')
   .map(r => path.resolve(r.trim()))
@@ -45,10 +43,7 @@ function ejecutar(comando, params = {}) {
       return _exec(`pm2 logs ${_validarNombreProceso(params.proceso)} --lines ${_validarNumero(params.lineas, 50)} --nostream`);
 
     case 'taskkill_chrome':
-      return _taskkillChrome();
-
-    case 'sc_query':
-      return _exec(`sc query ${_validarNombreServicio(params.servicio)}`);
+      return _killChromium();
 
     case 'git_pull':
       return _gitPull(params.ruta);
@@ -57,26 +52,26 @@ function ejecutar(comando, params = {}) {
       return _gitCheckUpdates(params.ruta);
 
     case 'disk_status':
-      return _exec('wmic logicaldisk get size,freespace,caption');
+      return _exec("df -h / | tail -1 | awk '{print $2,$3,$4,$5}'");
 
     case 'mem_status':
-      return _exec('wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /Value');
+      return _exec("free -m | grep Mem | awk '{print $2,$3,$4}'");
 
     default:
       throw new Error(`Comando sin implementar: ${comando}`);
   }
 }
 
-function _taskkillChrome() {
-  const procesos = ['chrome.exe', 'chromium.exe', 'chromium'];
+function _killChromium() {
+  const procesos = ['chromium', 'chrome'];
   const resultados = [];
 
   for (const proc of procesos) {
-    const r = spawnSync('taskkill', ['/F', '/IM', proc], { encoding: 'utf8' });
+    const r = spawnSync('pkill', ['-f', proc], { encoding: 'utf8' });
     resultados.push({ proceso: proc, salida: (r.stdout || '') + (r.stderr || '') });
   }
 
-  return resultados.map(r => `${r.proceso}: ${r.salida.trim()}`).join('\n');
+  return resultados.map(r => `${r.proceso}: ${r.salida.trim() || 'OK'}`).join('\n');
 }
 
 function _gitCheckUpdates(ruta) {
@@ -117,14 +112,12 @@ function _gitPull(ruta) {
 
   const rutaResuelta = path.resolve(ruta);
 
-  // Si no hay whitelist configurada, rechazar todo
   if (RUTAS_GIT_PERMITIDAS.length === 0) {
     throw new Error('RUTAS_GIT_PERMITIDAS no configuradas — git pull deshabilitado');
   }
 
-  // Verificar que la ruta esta dentro de alguna ruta permitida
   const permitida = RUTAS_GIT_PERMITIDAS.some(
-    permitida => rutaResuelta === permitida || rutaResuelta.startsWith(permitida + path.sep)
+    p => rutaResuelta === p || rutaResuelta.startsWith(p + path.sep)
   );
 
   if (!permitida) {
@@ -145,13 +138,6 @@ function _exec(cmd) {
 function _validarNombreProceso(nombre) {
   if (!nombre || !/^[a-zA-Z0-9_\-]+$/.test(nombre)) {
     throw new Error(`Nombre de proceso invalido: ${nombre}`);
-  }
-  return nombre;
-}
-
-function _validarNombreServicio(nombre) {
-  if (!nombre || !/^[a-zA-Z0-9_\-]+$/.test(nombre)) {
-    throw new Error(`Nombre de servicio invalido: ${nombre}`);
   }
   return nombre;
 }

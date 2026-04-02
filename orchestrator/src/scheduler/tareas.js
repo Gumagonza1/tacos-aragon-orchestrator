@@ -1,7 +1,7 @@
 'use strict';
 
 const cron = require('node-cron');
-const { verificarDisco, verificarMemoria, limpiarLogsViejos, verificarCommitsNuevos } = require('../executor/acciones');
+const { verificarDisco, verificarMemoria, limpiarLogsViejos, verificarCommitsNuevos, ajustarPrioridades } = require('../executor/acciones');
 const { resumenDiario, registrarEvento } = require('../db/queries');
 const { notificarAdmin } = require('../notifier/notifier');
 
@@ -67,6 +67,16 @@ function iniciarTareas() {
       if (!repo.ruta) continue;
       await verificarCommitsNuevos(repo.ruta, repo.nombre);
     }
+  }, { timezone: 'America/Hermosillo' });
+
+  // Prioridad de recursos: modo trabajo a las 18:00 (mar-dom)
+  cron.schedule('0 18 * * 2-7', async () => {
+    await ajustarPrioridades('trabajo');
+  }, { timezone: 'America/Hermosillo' });
+
+  // Prioridad de recursos: modo normal a medianoche
+  cron.schedule('0 0 * * *', async () => {
+    await ajustarPrioridades('normal');
   }, { timezone: 'America/Hermosillo' });
 
   registrarEvento('orquestador', 'inicio', 'Tareas programadas iniciadas', 'info');

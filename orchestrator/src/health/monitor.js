@@ -16,12 +16,12 @@ async function verificarServicio(servicio) {
   try {
     let ok = false;
 
-    if (servicio.tipo === 'pm2') {
-      ok = await _verificarPm2(servicio);
+    if (servicio.tipo === 'docker') {
+      ok = await _verificarDocker(servicio);
     } else if (servicio.tipo === 'http') {
       ok = await _verificarHttp(servicio);
-    } else if (servicio.tipo === 'nssm') {
-      ok = await _verificarNssm(servicio);
+    } else if (servicio.tipo === 'pm2') {
+      ok = await _verificarDocker(servicio); // PM2 → Docker in this environment
     }
 
     const anterior = estado.get(servicio.nombre);
@@ -48,14 +48,12 @@ function obtenerEstadoTodos() {
   return Object.fromEntries(estado);
 }
 
-async function _verificarPm2(servicio) {
-  const resultado = await llamarBridge('pm2_list', {});
-  if (!resultado) return false;
-
+async function _verificarDocker(servicio) {
   try {
-    const lista = JSON.parse(resultado);
-    const proc = lista.find(p => p.name === servicio.proceso);
-    return proc && proc.pm2_env && proc.pm2_env.status === 'online';
+    const lista = await llamarBridge('pm2_list', {});
+    if (!Array.isArray(lista)) return false;
+    const container = lista.find(c => c.name === servicio.proceso || c.name.includes(servicio.proceso));
+    return container && container.status === 'running';
   } catch {
     return false;
   }
@@ -74,12 +72,6 @@ async function _verificarHttp(servicio) {
   } catch {
     return false;
   }
-}
-
-async function _verificarNssm(servicio) {
-  const resultado = await llamarBridge('sc_query', { servicio: servicio.servicio });
-  if (!resultado) return false;
-  return resultado.includes('RUNNING');
 }
 
 module.exports = { verificarTodos, verificarServicio, obtenerEstado, obtenerEstadoTodos, SERVICIOS };

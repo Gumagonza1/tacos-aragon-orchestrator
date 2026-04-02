@@ -5,8 +5,6 @@ const VARS_REQUERIDAS = [
   'API_URL',
   'API_TOKEN',
   'ADMIN_NUMERO',
-  'BRIDGE_TOKEN',
-  'BRIDGE_URL',
 ];
 
 function validarConfig() {
@@ -17,7 +15,6 @@ function validarConfig() {
     process.exit(1);
   }
 
-  // Validar formato de numero admin
   if (!/^\d{10,15}@c\.us$/.test(process.env.ADMIN_NUMERO)) {
     console.error('[config] ADMIN_NUMERO formato invalido — debe ser 521XXXXXXXXXX@c.us');
     process.exit(1);

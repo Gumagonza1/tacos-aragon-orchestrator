@@ -51,13 +51,40 @@ function listarPendientes() {
 
 async function ejecutarPropuestaAprobada(id) {
   const propuesta = obtenerPropuesta(id);
-  if (!propuesta || propuesta.tipo !== 'git_pull') return;
+  if (!propuesta) return;
+
+  const TIPOS_EJECUTABLES = ['git_pull', 'limpiar_ram'];
+
+  if (!TIPOS_EJECUTABLES.includes(propuesta.tipo)) return;
 
   try {
-    const resultado = await llamarBridge('git_pull', { ruta: propuesta.detalle });
-    const salida = resultado ? resultado.trim() : 'Sin salida.';
+    let salida = '';
+
+    if (propuesta.tipo === 'git_pull') {
+      const resultado = await llamarBridge('git_pull', { ruta: propuesta.detalle });
+      salida = resultado ? resultado.trim() : 'Sin salida.';
+    }
+
+    if (propuesta.tipo === 'limpiar_ram') {
+      const { execSync } = require('child_process');
+      const cmds = [
+        'docker system prune -f 2>&1 | tail -2',
+        'journalctl --vacuum-size=50M 2>&1 | tail -1',
+        'sync && echo 3 > /proc/sys/vm/drop_caches && echo "Cache liberado"',
+      ];
+      const resultados = [];
+      for (const cmd of cmds) {
+        try {
+          resultados.push(execSync(cmd, { encoding: 'utf8', timeout: 30000 }).trim());
+        } catch (e) { resultados.push(`Error: ${e.message}`); }
+      }
+      // Verificar RAM después de limpiar
+      const memDespues = execSync("free -m | grep Mem | awk '{print $4}'", { encoding: 'utf8' }).trim();
+      salida = resultados.join('\n') + `\n\nRAM disponible ahora: ${memDespues} MB`;
+    }
+
     await notificarAdmin(`*[ORQUESTADOR]* Propuesta #${id} ejecutada.\n${salida}`);
-    registrarAccionAutonoma('git_pull', propuesta.detalle, salida);
+    registrarAccionAutonoma(propuesta.tipo, propuesta.detalle, salida);
   } catch (err) {
     await notificarAdmin(`*[ORQUESTADOR]* Error ejecutando propuesta #${id}: ${err.message}`);
   }
